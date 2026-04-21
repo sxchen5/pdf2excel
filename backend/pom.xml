@@ -19,6 +19,11 @@
 
     <properties>
         <java.version>21</java.version>
+        <!-- Plugin versions compatible with Maven 3.3.x -->
+        <maven-compiler-plugin.version>3.8.1</maven-compiler-plugin.version>
+        <maven-surefire-plugin.version>2.22.2</maven-surefire-plugin.version>
+        <maven-resources-plugin.version>3.2.0</maven-resources-plugin.version>
+        <exec-maven-plugin.version>3.0.0</exec-maven-plugin.version>
     </properties>
 
     <dependencies>
@@ -51,40 +56,51 @@
     <build>
         <plugins>
             <plugin>
-                <groupId>com.github.eirslett</groupId>
-                <artifactId>frontend-maven-plugin</artifactId>
-                <version>1.15.0</version>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven-compiler-plugin.version}</version>
                 <configuration>
-                    <workingDirectory>../frontend</workingDirectory>
-                    <installDirectory>${project.build.directory}/node</installDirectory>
+                    <release>${java.version}</release>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${maven-surefire-plugin.version}</version>
+            </plugin>
+            <!-- Use system npm (no bundled Node); run before static resources are copied -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>${exec-maven-plugin.version}</version>
                 <executions>
                     <execution>
-                        <id>install node and npm</id>
+                        <id>npm-install</id>
+                        <phase>generate-resources</phase>
                         <goals>
-                            <goal>install-node-and-npm</goal>
+                            <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <nodeVersion>v22.12.0</nodeVersion>
-                            <npmVersion>10.9.0</npmVersion>
+                            <executable>npm</executable>
+                            <workingDirectory>${project.basedir}/../frontend</workingDirectory>
+                            <arguments>
+                                <argument>install</argument>
+                            </arguments>
                         </configuration>
                     </execution>
                     <execution>
-                        <id>npm install</id>
+                        <id>npm-run-build</id>
+                        <phase>generate-resources</phase>
                         <goals>
-                            <goal>npm</goal>
+                            <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <arguments>install</arguments>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>npm run build</id>
-                        <goals>
-                            <goal>npm</goal>
-                        </goals>
-                        <configuration>
-                            <arguments>run build</arguments>
+                            <executable>npm</executable>
+                            <workingDirectory>${project.basedir}/../frontend</workingDirectory>
+                            <arguments>
+                                <argument>run</argument>
+                                <argument>build</argument>
+                            </arguments>
                         </configuration>
                     </execution>
                 </executions>
@@ -92,7 +108,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-resources-plugin</artifactId>
-                <version>3.3.1</version>
+                <version>${maven-resources-plugin.version}</version>
                 <executions>
                     <execution>
                         <id>copy-frontend-dist</id>

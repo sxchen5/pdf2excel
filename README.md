@@ -4,9 +4,12 @@ Spring Boot 3 + Vue 3：上传增值税电子发票等 PDF 或图片，自动提
 
 ## 运行环境
 
-- JDK 21、Maven 3
-- Node.js 22（仅开发或跳过 `frontend-maven-plugin` 时使用）
+- JDK 21
+- Maven **3.3.9 及以上**（`pom.xml` 中已固定 compiler / surefire / resources / exec 插件版本，便于在旧版 Maven 上构建）
+- **Node.js 与 npm** 已安装在系统 `PATH` 中（`mvn package` 会在 `generate-resources` 阶段执行 `frontend` 目录下的 `npm install` 与 `npm run build`，不再通过 Maven 下载 Node）
 - **Tesseract OCR**（扫描件 / 无文字层 PDF）：需安装 `tesseract-ocr` 与 `tesseract-ocr-chi-sim`；默认数据路径 `app.tesseract.datapath=/usr/share/tesseract-ocr/5/tessdata`（可在 `application.properties` 修改）
+
+**说明**：Spring Boot 3.4 的父 POM 通常要求 **Maven 3.6.3+**；若仅用 Maven 3.3.9 仍无法解析父 POM 或插件，请将本机 Maven 升级到 3.6.3 或更高版本。
 
 ## 一键构建与启动
 
