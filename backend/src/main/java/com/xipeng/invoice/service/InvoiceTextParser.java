@@ -15,8 +15,19 @@ public final class InvoiceTextParser {
 
     private static final Pattern DATE = Pattern.compile(
             "开\\s*票\\s*日\\s*期\\s*[:：]\\s*(\\d{4})\\s*年\\s*(\\d{1,2})\\s*月\\s*(\\d{1,2})\\s*日");
-    private static final Pattern INVOICE_NO = Pattern.compile("发\\s*票\\s*号\\s*码\\s*[:：]\\s*([0-9]{6,30})");
+    /** 全电票：发票号码：20位（无“码”字） */
+    private static final Pattern INVOICE_NO = Pattern.compile(
+            "发\\s*票\\s*号\\s*(?:码)?\\s*[:：]\\s*([0-9]{6,30})");
+    /** 购/销方 “名称：” 单行 */
     private static final Pattern NAME_LABEL = Pattern.compile("名\\s*称\\s*[:：]\\s*([^\\r\\n]+)");
+    /**
+     * 数电票版式：销、售、方、名、称 等字被拆行，如
+     * {@code 销 名称：南京… / 售 / 方}
+     */
+    private static final Pattern SELLER_NAME_SPLIT = Pattern.compile(
+            "销\\s*售?\\s*名\\s*称\\s*[:：]\\s*([^\\r\\n]+)", Pattern.DOTALL);
+    private static final Pattern BUYER_NAME_SPLIT = Pattern.compile(
+            "购\\s*买?\\s*名\\s*称\\s*[:：]\\s*([^\\r\\n]+)", Pattern.DOTALL);
     /** Line item: *大类*明细 (common on VAT invoices) */
     private static final Pattern ITEM_STAR_LINE = Pattern.compile(
             "([*＊][^\\r\\n*]{1,40}[*＊][^\\r\\n]{1,120})");
@@ -27,6 +38,14 @@ public final class InvoiceTextParser {
     /** Amount + tax on same line as item row: 243.40 6% 14.60 */
     private static final Pattern LINE_AMOUNT_TAX = Pattern.compile(
             "([\\d,]+\\.\\d{2})\\s*\\d{1,2}\\s*%\\s*([\\d,]+\\.\\d{2})");
+    /** 税 额 后的数值（常与“金 额”块配对） */
+    private static final Pattern TAX_AFTER_SHUIE = Pattern.compile(
+            "税\\s*\\n?\\s*额\\s*\\n\\s*([¥￥]?\\s*[\\d,]+\\.\\d{2})");
+    private static final Pattern AMOUNT_TAX_BLOCK = Pattern.compile(
+            "金\\s*\\n?\\s*额([\\s\\S]{0,1200}?)税\\s*\\n?\\s*额", Pattern.DOTALL);
+    /** 不含¥的两位小数金额行（排除单价长小数） */
+    private static final Pattern PLAIN_MONEY_TWO_DP = Pattern.compile(
+            "(?:^|\\n)\\s*([\\d,]+\\.\\d{2})\\s*(?:\\n|$)");
     private static final Pattern MONEY_PAIR = Pattern.compile(
             "金\\s*额[^\\d¥￥]{0,80}([¥￥]?\\s*[\\d,]+\\.\\d{2})[^\\d¥￥]{0,80}税\\s*额[^\\d¥￥]{0,80}([¥￥]?\\s*[\\d,]+\\.\\d{2})");
     private static final Pattern TOTAL_LINE = Pattern.compile(
@@ -49,7 +68,7 @@ public final class InvoiceTextParser {
         String invoiceDate = findDate(normalized);
         String invoiceNumber = findInvoiceNumber(normalized);
         String issuer = findIssuer(normalized);
-        String item = stripTrailingMergedAmount(findItem(normalized));
+        String item = sanitizeItemDisplay(stripTrailingMergedAmount(findItem(normalized)));
         String[] amounts = findAmountAndTax(normalized);
 
         return new ExtractedInvoiceDto(
@@ -87,10 +106,17 @@ public final class InvoiceTextParser {
     }
 
     private static String findIssuer(String text) {
+        Matcher seller = SELLER_NAME_SPLIT.matcher(text);
+        if (seller.find()) {
+            String v = cleanPartyName(seller.group(1));
+            if (looksLikeCompanyName(v)) {
+                return v;
+            }
+        }
         List<String> names = new ArrayList<>();
         Matcher m = NAME_LABEL.matcher(text);
         while (m.find()) {
-            String v = m.group(1).trim();
+            String v = cleanPartyName(m.group(1));
             if (v.length() >= 2 && !v.matches(".*有限公司.*有限公司.*")) {
                 names.add(v);
             }
@@ -98,8 +124,35 @@ public final class InvoiceTextParser {
         if (names.isEmpty()) {
             return "";
         }
-        // Typical layout: buyer first, seller last in PDF text order
-        return names.get(names.size() - 1);
+        String buyer = "";
+        Matcher buy = BUYER_NAME_SPLIT.matcher(text);
+        if (buy.find()) {
+            buyer = cleanPartyName(buy.group(1));
+        }
+        // 若最后一项与购买方一致，则销方为倒数第二（数电票常见顺序）
+        String last = names.get(names.size() - 1);
+        if (!buyer.isEmpty() && last.equals(buyer) && names.size() >= 2) {
+            return names.get(names.size() - 2);
+        }
+        // 旧版式：先买方后卖方
+        return last;
+    }
+
+    private static String cleanPartyName(String s) {
+        if (s == null) {
+            return "";
+        }
+        return s.replaceAll("\\s+", "").trim();
+    }
+
+    private static boolean looksLikeCompanyName(String s) {
+        if (s == null || s.length() < 2) {
+            return false;
+        }
+        if (s.matches("^[0-9A-Z]{10,20}$")) {
+            return false;
+        }
+        return s.matches(".*[\\u4e00-\\u9fff].*") || s.contains("公司") || s.contains("有限");
     }
 
     private static String findItem(String text) {
@@ -188,6 +241,14 @@ public final class InvoiceTextParser {
         if (!amount.isEmpty() || !tax.isEmpty()) {
             return new String[]{amount, tax};
         }
+        Matcher block = AMOUNT_TAX_BLOCK.matcher(text);
+        if (block.find()) {
+            String amt = findPlainMoneyInBlock(block.group(1));
+            Matcher s = TAX_AFTER_SHUIE.matcher(text);
+            if (!amt.isEmpty() && s.find()) {
+                return new String[]{amt, stripMoney(s.group(1))};
+            }
+        }
         Matcher m = MONEY_PAIR.matcher(text);
         while (m.find()) {
             amount = stripMoney(m.group(1));
@@ -201,6 +262,24 @@ public final class InvoiceTextParser {
             return new String[]{stripMoney(mt.group(1)), stripMoney(mt.group(2))};
         }
         return fallbackMoney(text);
+    }
+
+    private static String findPlainMoneyInBlock(String block) {
+        if (block == null || block.isBlank()) {
+            return "";
+        }
+        String best = "";
+        Matcher m = PLAIN_MONEY_TWO_DP.matcher(block);
+        while (m.find()) {
+            String raw = m.group(1).replace(",", "");
+            if (raw.matches("\\d+\\.\\d{2}") && raw.length() <= 14) {
+                int dot = raw.indexOf('.');
+                if (dot > 0 && raw.substring(0, dot).length() <= 10) {
+                    best = stripMoney(m.group(1));
+                }
+            }
+        }
+        return best;
     }
 
     private static String[] fallbackMoney(String text) {
@@ -238,6 +317,30 @@ public final class InvoiceTextParser {
 
     private static String nz(String s) {
         return s == null ? "" : s;
+    }
+
+    /** 去掉项目名称后误粘的数量、单价长小数、金额等 */
+    private static String sanitizeItemDisplay(String item) {
+        if (item == null || item.isEmpty()) {
+            return "";
+        }
+        String t = toAsciiDigits(item.trim());
+        t = MERGED_TAIL_ONLY.matcher(t).replaceFirst("").trim();
+        for (int i = 0; i < 6; i++) {
+            String next = t.replaceFirst("\\d+\\s+\\d+(\\.\\d+)?$", "").trim();
+            if (next.equals(t)) {
+                break;
+            }
+            t = next;
+        }
+        Matcher glued = Pattern.compile("^(.*[\\u4e00-\\u9fff*＊])(\\d[\\d.]*)$").matcher(t);
+        if (glued.matches()) {
+            String tail = glued.group(2);
+            if (tail.matches("\\d+(\\.\\d{2,})?")) {
+                t = glued.group(1).trim();
+            }
+        }
+        return t;
     }
 
     /** Last-resort strip when PDF merges 金额+税率+税额 onto the item cell */

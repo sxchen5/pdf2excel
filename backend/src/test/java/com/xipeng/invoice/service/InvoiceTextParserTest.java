@@ -57,4 +57,63 @@ class InvoiceTextParserTest {
         ExtractedInvoiceDto d = InvoiceTextParser.parse(text);
         assertEquals("*餐饮服务*餐费", d.invoiceItem());
     }
+
+    @Test
+    void parsesFullDigitalInvoiceWithSplitSellerLabel() {
+        String text = """
+                电子发票（普通发票）
+                发票号码：26322000002467050361
+                开票日期：2026年03月30日
+                项目名称
+                *餐饮服务*餐饮服务
+                销 名称：南京茴一餐饮管理有限公司
+                售
+                方
+                购 名称：亚信安全科技股份有限公司
+                买
+                方
+                金
+                额
+                258.32
+                税
+                额
+                ¥2.58
+                """;
+        ExtractedInvoiceDto d = InvoiceTextParser.parse(text);
+        assertTrue(d.issuer().contains("南京茴一餐饮"));
+        assertEquals("*餐饮服务*餐饮服务", d.invoiceItem());
+        assertEquals("258.32", d.invoiceAmount());
+        assertEquals("2.58", d.taxAmount());
+    }
+
+    @Test
+    void parsesHotelInvoiceItemWithoutQuantityGlue() {
+        String text = """
+                电子发票（普通发票）
+                项目名称
+                *住宿服务*住宿费
+                销
+                售 名称：上海莫泰金陵东路酒店有限公司
+                方
+                购
+                买 名称：亚信科技（成都）有限公司
+                方
+                数 量
+                单 价
+                金 额
+                3 368.867924528302
+                1106.60
+                税率/征收率
+                6%
+                税 额
+                ¥66.40
+                发票号码： 23312000000073410584
+                开票日期： 2023年09月08日
+                """;
+        ExtractedInvoiceDto d = InvoiceTextParser.parse(text);
+        assertTrue(d.issuer().contains("莫泰"));
+        assertEquals("*住宿服务*住宿费", d.invoiceItem());
+        assertEquals("1106.6", d.invoiceAmount());
+        assertEquals("66.4", d.taxAmount());
+    }
 }

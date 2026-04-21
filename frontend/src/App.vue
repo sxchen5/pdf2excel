@@ -2,11 +2,26 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { saveDraftState, loadDraftState, clearAllDraft, saveBlob, deleteBlob } from './persist.js'
 
+/** 与常见移交表、数电票版式一致，可下拉选择 */
+const INVOICE_TYPE_OPTIONS = [
+  '电子普票',
+  '电子专票',
+  '电子发票（普通发票）',
+  '电子发票（增值税专用发票）',
+  '增值税电子普通发票',
+  '增值税电子专用发票',
+  '纸质增值税普通发票',
+  '纸质增值税专用发票',
+  '广西通用机打发票',
+  '代开发票',
+  '其他'
+]
+
 const COLS = [
   { key: 'seqNo', label: '序号', width: '52px' },
-  { key: 'invoiceType', label: '票据类型', width: '120px' },
-  { key: 'transferDate', label: '移交日期', width: '100px' },
-  { key: 'invoiceDate', label: '开票日期', width: '100px' },
+  { key: 'invoiceType', label: '票据类型', width: '140px' },
+  { key: 'transferDate', label: '移交日期', width: '118px' },
+  { key: 'invoiceDate', label: '开票日期', width: '118px' },
   { key: 'invoiceNumber', label: '票据号码', width: '140px' },
   { key: 'issuer', label: '开票单位', width: '180px' },
   { key: 'invoiceItem', label: '开票项目', width: '160px' },
@@ -23,13 +38,32 @@ const serialNo = ref('')
 const sheetName = ref('已收发票')
 
 const defaults = reactive({
-  invoiceType: '电子普票',
+  invoiceType: '电子发票（普通发票）',
   transferDate: '',
   transferor: '',
   receiver: '',
   supervisor: '',
   remarks: ''
 })
+
+/** 表格与导出使用 YYYY/M/D；日期选择器使用 YYYY-MM-DD */
+function dateToIso(slash) {
+  const s = (slash && String(slash).trim()) || ''
+  if (!s) return ''
+  const m = s.match(/^(\d{4})[\/年\-](\d{1,2})[\/月\-](\d{1,2})/)
+  if (!m) return ''
+  const y = m[1]
+  const mo = String(Number(m[2])).padStart(2, '0')
+  const d = String(Number(m[3])).padStart(2, '0')
+  return `${y}-${mo}-${d}`
+}
+
+function isoToSlash(iso) {
+  const s = (iso && String(iso).trim()) || ''
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return ''
+  const [y, mo, d] = s.split('-')
+  return `${Number(y)}/${Number(mo)}/${Number(d)}`
+}
 
 const rows = ref([])
 const busy = ref(false)
@@ -303,8 +337,21 @@ async function hardReset() {
     <section class="panel defaults">
       <span class="section-title">新建行时的默认填写（不含识别字段）</span>
       <div class="defaults-grid">
-        <label>票据类型 <input v-model="defaults.invoiceType" /></label>
-        <label>移交日期 <input v-model="defaults.transferDate" placeholder="YYYY/M/D" /></label>
+        <label
+          >票据类型
+          <select v-model="defaults.invoiceType" class="cell-control">
+            <option v-for="opt in INVOICE_TYPE_OPTIONS" :key="opt" :value="opt">{{ opt }}</option>
+          </select>
+        </label>
+        <label
+          >移交日期
+          <input
+            type="date"
+            class="cell-control"
+            :value="dateToIso(defaults.transferDate)"
+            @input="defaults.transferDate = isoToSlash($event.target.value)"
+          />
+        </label>
         <label>移交人 <input v-model="defaults.transferor" /></label>
         <label>接收人 <input v-model="defaults.receiver" /></label>
         <label>监督人 <input v-model="defaults.supervisor" /></label>
@@ -353,7 +400,17 @@ async function hardReset() {
         <tbody>
           <tr v-for="(row, idx) in rows" :key="idx">
             <td v-for="c in COLS" :key="c.key">
-              <input v-model="row[c.key]" type="text" />
+              <select v-if="c.key === 'invoiceType'" v-model="row.invoiceType" class="cell-control">
+                <option v-for="opt in INVOICE_TYPE_OPTIONS" :key="opt" :value="opt">{{ opt }}</option>
+              </select>
+              <input
+                v-else-if="c.key === 'transferDate' || c.key === 'invoiceDate'"
+                type="date"
+                class="cell-control"
+                :value="dateToIso(row[c.key])"
+                @input="row[c.key] = isoToSlash($event.target.value)"
+              />
+              <input v-else v-model="row[c.key]" type="text" />
             </td>
             <td class="actions">
               <button type="button" class="btn sm" @click="clearRow(idx)">清除本行</button>
@@ -427,11 +484,18 @@ body {
   font-weight: 600;
   font-size: 0.9rem;
 }
-input[type='text'] {
+input[type='text'],
+input[type='date'],
+select.cell-control {
   border: 1px solid #cfd6e4;
   border-radius: 6px;
   padding: 6px 8px;
   font-size: 0.9rem;
+}
+select.cell-control {
+  width: 100%;
+  max-width: 100%;
+  background: #fff;
 }
 input.grow {
   flex: 1;
@@ -549,13 +613,20 @@ table.grid {
   padding: 0;
   vertical-align: middle;
 }
-.grid td input {
+.grid td input[type='text'],
+.grid td input[type='date'],
+.grid td select.cell-control {
   width: 100%;
   min-width: 0;
   border: none;
   border-radius: 0;
   padding: 6px;
   box-sizing: border-box;
+}
+.grid td input[type='date'],
+.grid td select.cell-control {
+  border: none;
+  font-size: 0.82rem;
 }
 .actions {
   width: 110px;
