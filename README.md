@@ -31,7 +31,7 @@ cd backend && mvn spring-boot:run
 cd frontend && npm install && npm run dev
 ```
 
-前端开发服务器为 `http://localhost:5173`，通过 Vite 代理访问 `/api`。
+前端开发服务器默认 `http://localhost:5173`（若端口被占用，Vite 会自动改用 5174 等）；通过 Vite 代理访问 `/api`。直连后端时，后端 CORS 已允许 `http://localhost:*` 与 `http://127.0.0.1:*`。
 
 ## 说明
 

@@ -26,7 +26,7 @@ const defaults = reactive({
   invoiceType: '电子普票',
   transferDate: '',
   transferor: '',
-  receiver: '吴现敏',
+  receiver: '',
   supervisor: '',
   remarks: ''
 })
@@ -35,6 +35,97 @@ const rows = ref([])
 const busy = ref(false)
 const message = ref('')
 const fileInput = ref(null)
+const dropActive = ref(false)
+let dragDepth = 0
+
+function collectAcceptedFiles(fileList) {
+  const out = []
+  for (const f of Array.from(fileList || [])) {
+    const name = f.name || ''
+    if (/\.(pdf|png|jpg|jpeg|webp)$/i.test(name)) {
+      out.push(f)
+      continue
+    }
+    if (f.type === 'application/pdf' || f.type.startsWith('image/')) {
+      out.push(f)
+    }
+  }
+  return out
+}
+
+async function processFiles(files) {
+  const accepted = collectAcceptedFiles(files)
+  if (!accepted.length) {
+    message.value = '未识别到支持的文件（PDF、PNG、JPG、JPEG、WEBP）'
+    return
+  }
+  busy.value = true
+  message.value = ''
+  for (const file of accepted) {
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/extract', { method: 'POST', body: fd })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || res.statusText)
+      }
+      const data = await res.json()
+      const blobId = await saveBlob(file)
+      rows.value.push(
+        emptyRow({
+          invoiceDate: data.invoiceDate || '',
+          invoiceNumber: data.invoiceNumber || '',
+          issuer: data.issuer || '',
+          invoiceItem: data.invoiceItem || '',
+          invoiceAmount: data.invoiceAmount || '',
+          taxAmount: data.taxAmount || '',
+          cachedFileName: file.name,
+          blobId
+        })
+      )
+      renumber()
+    } catch (err) {
+      message.value = `识别失败（${file.name}）：${err.message || err}`
+    }
+  }
+  busy.value = false
+  if (fileInput.value) fileInput.value.value = ''
+}
+
+function onFilesSelected(e) {
+  processFiles(collectAcceptedFiles(e.target.files))
+}
+
+function onDragEnter() {
+  dragDepth++
+  dropActive.value = true
+}
+
+function onDragLeave() {
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (dragDepth === 0) dropActive.value = false
+}
+
+function onDrop(e) {
+  dragDepth = 0
+  dropActive.value = false
+  const fromFiles = e.dataTransfer?.files
+  if (fromFiles?.length) {
+    processFiles(collectAcceptedFiles(fromFiles))
+    return
+  }
+  const items = e.dataTransfer?.items
+  if (!items?.length) return
+  const files = []
+  for (const it of Array.from(items)) {
+    if (it.kind === 'file') {
+      const f = it.getAsFile()
+      if (f) files.push(f)
+    }
+  }
+  processFiles(collectAcceptedFiles(files))
+}
 
 function emptyRow(overrides = {}) {
   return {
@@ -83,43 +174,6 @@ async function clearAllRows() {
   }
   rows.value = []
   message.value = '已清空全部行与缓存文件'
-}
-
-async function onFilesSelected(e) {
-  const files = Array.from(e.target.files || [])
-  if (!files.length) return
-  busy.value = true
-  message.value = ''
-  for (const file of files) {
-    try {
-      const fd = new FormData()
-      fd.append('file', file)
-      const res = await fetch('/api/extract', { method: 'POST', body: fd })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || res.statusText)
-      }
-      const data = await res.json()
-      const blobId = await saveBlob(file)
-      rows.value.push(
-        emptyRow({
-          invoiceDate: data.invoiceDate || '',
-          invoiceNumber: data.invoiceNumber || '',
-          issuer: data.issuer || '',
-          invoiceItem: data.invoiceItem || '',
-          invoiceAmount: data.invoiceAmount || '',
-          taxAmount: data.taxAmount || '',
-          cachedFileName: file.name,
-          blobId
-        })
-      )
-      renumber()
-    } catch (err) {
-      message.value = `识别失败（${file.name}）：${err.message || err}`
-    }
-  }
-  busy.value = false
-  if (fileInput.value) fileInput.value.value = ''
 }
 
 async function exportExcel() {
@@ -259,14 +313,26 @@ async function hardReset() {
     </section>
 
     <section class="toolbar">
-      <input
-        ref="fileInput"
-        type="file"
-        accept=".pdf,.png,.jpg,.jpeg,.webp"
-        multiple
-        class="file"
-        @change="onFilesSelected"
-      />
+      <div
+        class="dropzone"
+        :class="{ active: dropActive, disabled: busy }"
+        @dragenter.prevent="onDragEnter"
+        @dragleave.prevent="onDragLeave"
+        @dragover.prevent
+        @drop.prevent="onDrop"
+        @click="!busy && fileInput?.click()"
+      >
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
+          multiple
+          class="file-hidden"
+          @change="onFilesSelected"
+        />
+        <p class="dropzone-title">点击或拖入文件上传</p>
+        <p class="dropzone-hint">支持 PDF、PNG、JPG、JPEG、WEBP，可多选或一次拖入多个文件</p>
+      </div>
       <button type="button" class="btn secondary" :disabled="busy" @click="addBlankRow">添加空行</button>
       <button type="button" class="btn primary" :disabled="busy || !rows.length" @click="exportExcel">
         导出 Excel
@@ -379,12 +445,47 @@ input.mid {
 .toolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   margin-top: 16px;
 }
-.file {
-  max-width: 220px;
+.dropzone {
+  flex: 1;
+  min-width: 240px;
+  max-width: 520px;
+  border: 2px dashed #94a3b8;
+  border-radius: 10px;
+  padding: 20px 16px;
+  text-align: center;
+  cursor: pointer;
+  background: #f8fafc;
+  transition: border-color 0.15s, background 0.15s;
+}
+.dropzone:hover:not(.disabled),
+.dropzone.active:not(.disabled) {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+.dropzone.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.dropzone-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.dropzone-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+.file-hidden {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 .btn {
   border: none;
