@@ -34,4 +34,19 @@ class InvoicePdfTextIntegrationTest {
         assertEquals("243.4", d.invoiceAmount());
         assertEquals("14.6", d.taxAmount());
     }
+
+    @Test
+    void parsesShanghaiDecemberHotelPdfIfPresent() throws Exception {
+        Path pdf = Path.of("/home/ubuntu/.cursor/projects/workspace/uploads/____12_.pdf");
+        Assumptions.assumeTrue(Files.isRegularFile(pdf));
+
+        String text;
+        try (PDDocument doc = Loader.loadPDF(pdf.toFile())) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            stripper.setSortByPosition(true);
+            text = stripper.getText(doc);
+        }
+        ExtractedInvoiceDto d = InvoiceTextParser.parse(text);
+        assertTrue(d.issuer().contains("莫泰"), "issuer=" + d.issuer());
+    }
 }

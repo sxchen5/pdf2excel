@@ -433,42 +433,41 @@ async function hardReset() {
       </div>
     </section>
 
-    <section class="toolbar-row">
-      <aside class="upload-column">
-        <div class="upload-column-title">文件上传</div>
-        <div
-          class="dropzone"
-          :class="{ active: dropActive, disabled: busy }"
-          @dragenter.prevent="onDragEnter"
-          @dragleave.prevent="onDragLeave"
-          @dragover.prevent
-          @drop.prevent="onDrop"
-          @click="!busy && fileInput?.click()"
-        >
-          <input
-            ref="fileInput"
-            type="file"
-            accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
-            multiple
-            class="file-hidden"
-            @change="onFilesSelected"
-          />
-          <p class="dropzone-title">点击或拖入</p>
-          <p class="dropzone-hint">PDF / 图片，支持批量</p>
-        </div>
-      </aside>
-      <div class="toolbar-main">
-        <div class="toolbar-actions">
-          <button type="button" class="btn secondary" :disabled="busy" @click="addBlankRow">添加空行</button>
-          <button type="button" class="btn primary" :disabled="busy || !rows.length" @click="exportExcel">
-            导出 Excel
-          </button>
-          <button type="button" class="btn danger" :disabled="busy" @click="hardReset">一键清空（含本地缓存）</button>
-          <span v-if="busy" class="hint">处理中…</span>
-          <span v-if="message" class="msg">{{ message }}</span>
-        </div>
-        <p class="table-hint">表头右侧竖线可左右拖拽，调整列宽（设置会保存在本机浏览器）。</p>
+    <section class="upload-row panel">
+      <div class="upload-column-title">文件上传</div>
+      <div
+        class="dropzone dropzone-full"
+        :class="{ active: dropActive, disabled: busy }"
+        @dragenter.prevent="onDragEnter"
+        @dragleave.prevent="onDragLeave"
+        @dragover.prevent
+        @drop.prevent="onDrop"
+        @click="!busy && fileInput?.click()"
+      >
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
+          multiple
+          class="file-hidden"
+          @change="onFilesSelected"
+        />
+        <p class="dropzone-title">点击或拖入文件到此处</p>
+        <p class="dropzone-hint">支持 PDF、PNG、JPG、JPEG、WEBP，可多选或一次拖入多个文件</p>
       </div>
+    </section>
+
+    <section class="toolbar-actions-row">
+      <div class="toolbar-actions">
+        <button type="button" class="btn secondary" :disabled="busy" @click="addBlankRow">添加空行</button>
+        <button type="button" class="btn primary" :disabled="busy || !rows.length" @click="exportExcel">
+          导出 Excel
+        </button>
+        <button type="button" class="btn danger" :disabled="busy" @click="hardReset">一键清空（含本地缓存）</button>
+        <span v-if="busy" class="hint">处理中…</span>
+        <span v-if="message" class="msg">{{ message }}</span>
+      </div>
+      <p class="table-hint">表头右侧竖线可左右拖拽，调整列宽（设置会保存在本机浏览器）。</p>
     </section>
 
     <div class="table-wrap">
@@ -536,11 +535,6 @@ body {
   max-width: 1600px;
   margin: 0 auto;
   padding: 24px 16px 48px;
-}
-@media (max-width: 900px) {
-  .toolbar-row {
-    grid-template-columns: 1fr;
-  }
 }
 .hero h1 {
   margin: 0 0 8px;
@@ -611,28 +605,20 @@ input.narrow {
 input.mid {
   width: 180px;
 }
-.toolbar-row {
-  display: grid;
-  grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
-  gap: 20px;
-  align-items: start;
+.upload-row {
   margin-top: 16px;
 }
-.upload-column {
-  background: #fff;
-  border-radius: 10px;
-  padding: 14px 14px 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e2e8f0;
+.upload-row.panel {
+  padding-top: 14px;
 }
 .upload-column-title {
   font-weight: 600;
-  font-size: 0.9rem;
-  margin: 0 0 10px;
+  font-size: 0.95rem;
+  margin: 0 0 12px;
   color: #1e293b;
 }
-.toolbar-main {
-  min-width: 0;
+.toolbar-actions-row {
+  margin-top: 12px;
 }
 .toolbar-actions {
   display: flex;
@@ -641,7 +627,7 @@ input.mid {
   gap: 10px;
 }
 .table-hint {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   font-size: 0.78rem;
   color: #64748b;
 }
@@ -654,6 +640,9 @@ input.mid {
   cursor: pointer;
   background: #f8fafc;
   transition: border-color 0.15s, background 0.15s;
+}
+.dropzone-full {
+  min-height: 88px;
 }
 .dropzone:hover:not(.disabled),
 .dropzone.active:not(.disabled) {

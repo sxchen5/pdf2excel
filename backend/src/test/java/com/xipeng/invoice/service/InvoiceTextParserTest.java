@@ -103,6 +103,21 @@ class InvoiceTextParserTest {
     }
 
     @Test
+    void parsesSellerFromShouMingChengWhenPdfBoxInterleavesMai() {
+        // PDFBox 抽取顺序：销、买名称、售名称 交错
+        String text = """
+                销
+                买 名称：亚信科技（成都）有限公司
+                售 名称：上海莫泰金陵东路酒店有限公司
+                方
+                发票号码：23312000000167282178
+                开票日期：2023年12月19日
+                """;
+        ExtractedInvoiceDto d = InvoiceTextParser.parse(text);
+        assertTrue(d.issuer().contains("莫泰"));
+    }
+
+    @Test
     void parsesSellerFromVatSpecialSellerInfoBlock() {
         String text = """
                 电子发票（增值税专用发票）

@@ -24,10 +24,21 @@ public final class InvoiceTextParser {
     /**
      * 数电票：{@code 销\\n售 名称：} 或 {@code 销 名称：}；专票常见「销售方信息」整块
      */
-    private static final Pattern SELLER_NAME_SPLIT = Pattern.compile(
-            "销(?:\\s+售)?\\s*名\\s*称\\s*[:：]\\s*([^\\r\\n]+)", Pattern.DOTALL);
-    private static final Pattern BUYER_NAME_SPLIT = Pattern.compile(
-            "购(?:\\s+买)?\\s*名\\s*称\\s*[:：]\\s*([^\\r\\n]+)", Pattern.DOTALL);
+    /**
+     * 数电票 PDFBox 常见乱序：先出现「买 名称：」购买方，再「售 名称：」销方——以「售 名称：」为准最稳
+     */
+    private static final Pattern SELLER_AFTER_SHOU = Pattern.compile("售\\s*名\\s*称\\s*[:：]\\s*([^\\r\\n]+)");
+    /** 部分版式：销 … 售 名称（中间可有其它字段） */
+    private static final Pattern SELLER_NAME_MULTILINE = Pattern.compile(
+            "销(?:\\s|\\n){0,120}?售\\s*名\\s*称\\s*[:：]\\s*([^\\r\\n]+)", Pattern.DOTALL);
+    /** 同一行：销 名称 或 销 售 名称 */
+    private static final Pattern SELLER_NAME_COMPACT = Pattern.compile(
+            "销\\s*售?\\s*名\\s*称\\s*[:：]\\s*([^\\r\\n]+)");
+    private static final Pattern BUYER_NAME_MULTILINE = Pattern.compile(
+            "购(?:\\s|\\n){0,40}?买\\s*名\\s*称\\s*[:：]\\s*([^\\r\\n]+)", Pattern.DOTALL);
+    private static final Pattern BUYER_AFTER_MAI = Pattern.compile("买\\s*名\\s*称\\s*[:：]\\s*([^\\r\\n]+)");
+    private static final Pattern BUYER_NAME_COMPACT = Pattern.compile(
+            "购\\s*买?\\s*名\\s*称\\s*[:：]\\s*([^\\r\\n]+)");
     /** 增值税专用发票：销售方信息 … 购买方信息 */
     private static final Pattern SELLER_INFO_SECTION = Pattern.compile(
             "(?:销售方信息|销售方)\\s*([\\s\\S]{0,1500}?)(?=购买方信息|购买方)", Pattern.DOTALL);
@@ -88,7 +99,9 @@ public final class InvoiceTextParser {
 
     private static String normalize(String raw) {
         String s = raw.replace('\u00a0', ' ');
-        s = s.replaceAll("[\t\f\r]+", "\n");
+        // PDFBox / OCR: unify all Unicode line breaks to \n (includes \r, \u2028, NEL, etc.)
+        s = s.replaceAll("\\R", "\n");
+        s = s.replaceAll("[\t\f]+", "\n");
         s = s.replaceAll(" {2,}", " ");
         return s;
     }
@@ -121,9 +134,23 @@ public final class InvoiceTextParser {
                 }
             }
         }
-        Matcher seller = SELLER_NAME_SPLIT.matcher(text);
-        if (seller.find()) {
-            String v = cleanPartyName(seller.group(1));
+        Matcher shou = SELLER_AFTER_SHOU.matcher(text);
+        if (shou.find()) {
+            String v = cleanPartyName(shou.group(1));
+            if (looksLikeCompanyName(v)) {
+                return v;
+            }
+        }
+        Matcher sellerM = SELLER_NAME_MULTILINE.matcher(text);
+        if (sellerM.find()) {
+            String v = cleanPartyName(sellerM.group(1));
+            if (looksLikeCompanyName(v)) {
+                return v;
+            }
+        }
+        Matcher sellerC = SELLER_NAME_COMPACT.matcher(text);
+        if (sellerC.find()) {
+            String v = cleanPartyName(sellerC.group(1));
             if (looksLikeCompanyName(v)) {
                 return v;
             }
@@ -140,9 +167,19 @@ public final class InvoiceTextParser {
             return "";
         }
         String buyer = "";
-        Matcher buy = BUYER_NAME_SPLIT.matcher(text);
-        if (buy.find()) {
-            buyer = cleanPartyName(buy.group(1));
+        Matcher buyM = BUYER_NAME_MULTILINE.matcher(text);
+        if (buyM.find()) {
+            buyer = cleanPartyName(buyM.group(1));
+        } else {
+            Matcher buyMa = BUYER_AFTER_MAI.matcher(text);
+            if (buyMa.find()) {
+                buyer = cleanPartyName(buyMa.group(1));
+            } else {
+                Matcher buyC = BUYER_NAME_COMPACT.matcher(text);
+                if (buyC.find()) {
+                    buyer = cleanPartyName(buyC.group(1));
+                }
+            }
         }
         String buyerKey = normKey(buyer);
         // 若最后一项与购买方一致，则销方为倒数第二（数电票常见顺序）

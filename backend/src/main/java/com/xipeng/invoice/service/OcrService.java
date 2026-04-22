@@ -13,6 +13,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -23,8 +24,12 @@ public class OcrService {
 
     private final ITesseract tesseract;
     private final Object tesseractLock = new Object();
+    private final boolean cliFallbackEnabled;
 
-    public OcrService(@Value("${app.tesseract.datapath:/usr/share/tesseract-ocr/5/tessdata}") String dataPath) {
+    public OcrService(
+            @Value("${app.tesseract.datapath:/usr/share/tesseract-ocr/5/tessdata}") String dataPath,
+            @Value("${app.ocr.tesseract-cli-fallback:true}") boolean cliFallbackEnabled) {
+        this.cliFallbackEnabled = cliFallbackEnabled;
         Tesseract t = new Tesseract();
         t.setDatapath(dataPath);
         t.setLanguage("chi_sim+eng");
@@ -45,12 +50,12 @@ public class OcrService {
         byte[] bytes = imageStream.readAllBytes();
         BufferedImage raw = ImageIO.read(new ByteArrayInputStream(bytes));
         if (raw == null) {
-            Path tmp = Files.createTempFile("ocr-upload-", suffix.startsWith(".") ? suffix : "." + suffix);
+            Path tmpIn = Files.createTempFile("ocr-upload-", suffix.startsWith(".") ? suffix : "." + suffix);
             try {
-                Files.write(tmp, bytes);
-                raw = ImageIO.read(tmp.toFile());
+                Files.write(tmpIn, bytes);
+                raw = ImageIO.read(tmpIn.toFile());
             } finally {
-                Files.deleteIfExists(tmp);
+                Files.deleteIfExists(tmpIn);
             }
         }
         if (raw == null) {
@@ -59,16 +64,76 @@ public class OcrService {
         return ocrImage(prepareForOcr(raw));
     }
 
+    /**
+     * Always rasterize to PNG on disk first, then Tess4J; on JNI crash or Tess4J error,
+     * fall back to {@code tesseract} CLI (separate process, avoids JVM native bugs on some JPEGs).
+     */
     private String ocrImage(BufferedImage image) throws IOException {
-        synchronized (tesseractLock) {
-            try {
-                return tesseract.doOCR(image);
-            } catch (TesseractException e) {
-                throw new IOException("OCR failed: " + e.getMessage(), e);
-            } catch (Error e) {
-                // Tesseract JNI: Invalid memory access on some JPEG/CMYK inputs
-                throw new IOException("OCR native error (try resaving image as RGB PNG): " + e.getMessage(), e);
+        Path pngTmp = Files.createTempFile("ocr-rgb-", ".png");
+        try {
+            ImageIO.write(image, "png", pngTmp.toFile());
+            synchronized (tesseractLock) {
+                try {
+                    BufferedImage forJvm = ImageIO.read(pngTmp.toFile());
+                    if (forJvm == null) {
+                        return tryCli(pngTmp);
+                    }
+                    return tesseract.doOCR(forJvm);
+                } catch (TesseractException e) {
+                    return tryCliOrThrow(pngTmp, new IOException("OCR failed: " + e.getMessage(), e));
+                } catch (Error e) {
+                    return tryCliOrThrow(
+                            pngTmp,
+                            new IOException("OCR native error: " + e.getMessage(), e));
+                }
             }
+        } finally {
+            Files.deleteIfExists(pngTmp);
+        }
+    }
+
+    private String tryCli(Path pngTmp) throws IOException {
+        if (!cliFallbackEnabled) {
+            return "";
+        }
+        return runTesseractCli(pngTmp);
+    }
+
+    private String tryCliOrThrow(Path pngTmp, IOException primary) throws IOException {
+        if (!cliFallbackEnabled) {
+            throw primary;
+        }
+        try {
+            return runTesseractCli(pngTmp);
+        } catch (IOException cli) {
+            primary.addSuppressed(cli);
+            throw primary;
+        }
+    }
+
+    private String runTesseractCli(Path imagePath) throws IOException {
+        ProcessBuilder pb = new ProcessBuilder(
+                "tesseract",
+                imagePath.toAbsolutePath().toString(),
+                "stdout",
+                "-l",
+                "chi_sim+eng",
+                "--oem",
+                "1",
+                "--psm",
+                "1");
+        pb.redirectErrorStream(true);
+        Process p = pb.start();
+        try {
+            byte[] out = p.getInputStream().readAllBytes();
+            int code = p.waitFor();
+            if (code != 0) {
+                throw new IOException("tesseract CLI exit " + code + ": " + new String(out, StandardCharsets.UTF_8));
+            }
+            return new String(out, StandardCharsets.UTF_8);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("tesseract CLI interrupted", e);
         }
     }
 
