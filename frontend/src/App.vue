@@ -394,7 +394,8 @@ async function hardReset() {
 </script>
 
 <template>
-  <div class="page">
+  <div class="app-shell">
+    <div class="page">
     <header class="hero">
       <h1>发票移交表生成</h1>
       <p class="sub">
@@ -519,39 +520,64 @@ async function hardReset() {
         </tbody>
       </table>
     </div>
+    </div>
   </div>
 </template>
 
 <style>
 :root {
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  color: #1a1a1a;
-  background: #f4f6f9;
+  font-family: 'Segoe UI', system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  color: #0f172a;
 }
 body {
   margin: 0;
+  min-height: 100vh;
+  background: #e2e8f0;
+}
+.app-shell {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: clamp(16px, 3.5vw, 40px) clamp(12px, 2.5vw, 28px) clamp(32px, 5vw, 56px);
+  background: linear-gradient(160deg, #e0e7ff 0%, #f1f5f9 38%, #e0f2fe 100%);
 }
 .page {
-  max-width: 1600px;
+  max-width: 1180px;
+  width: 100%;
   margin: 0 auto;
-  padding: 24px 16px 48px;
+  padding: clamp(20px, 2.8vw, 32px) clamp(16px, 2.2vw, 28px) clamp(24px, 3vw, 36px);
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 32px -8px rgba(15, 23, 42, 0.1);
+}
+.hero {
+  padding-bottom: 20px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #f1f5f9;
 }
 .hero h1 {
-  margin: 0 0 8px;
-  font-size: 1.5rem;
+  margin: 0 0 10px;
+  font-size: clamp(1.35rem, 2.2vw, 1.6rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #0f172a;
 }
 .sub {
   margin: 0;
-  color: #555;
-  line-height: 1.5;
-  max-width: 900px;
+  color: #64748b;
+  line-height: 1.6;
+  max-width: 52rem;
+  font-size: 0.92rem;
 }
 .panel {
-  background: #fff;
-  border-radius: 10px;
-  padding: 16px;
-  margin-top: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-top: 14px;
+  border: 1px solid #e8eef5;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 .meta {
   display: flex;
@@ -606,10 +632,13 @@ input.mid {
   width: 180px;
 }
 .upload-row {
-  margin-top: 16px;
+  margin-top: 14px;
 }
 .upload-row.panel {
   padding-top: 14px;
+  background: #fff;
+  border: 1px dashed #cbd5e1;
+  box-shadow: none;
 }
 .upload-column-title {
   font-weight: 600;
@@ -619,6 +648,10 @@ input.mid {
 }
 .toolbar-actions-row {
   margin-top: 12px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e8eef5;
 }
 .toolbar-actions {
   display: flex;
@@ -633,21 +666,22 @@ input.mid {
 }
 .dropzone {
   width: 100%;
-  border: 2px dashed #94a3b8;
-  border-radius: 10px;
-  padding: 22px 12px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 22px 16px;
   text-align: center;
   cursor: pointer;
-  background: #f8fafc;
-  transition: border-color 0.15s, background 0.15s;
+  background: linear-gradient(180deg, #fafbfc 0%, #f1f5f9 100%);
+  transition: border-color 0.18s, background 0.18s, box-shadow 0.18s;
 }
 .dropzone-full {
   min-height: 88px;
 }
 .dropzone:hover:not(.disabled),
 .dropzone.active:not(.disabled) {
-  border-color: #2563eb;
-  background: #eff6ff;
+  border-color: #3b82f6;
+  background: linear-gradient(180deg, #eff6ff 0%, #e0f2fe 100%);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 .dropzone.disabled {
   opacity: 0.55;
@@ -676,22 +710,27 @@ input.mid {
   padding: 8px 14px;
   font-size: 0.9rem;
   cursor: pointer;
+  box-sizing: border-box;
 }
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 .btn.primary {
-  background: #2563eb;
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
   color: #fff;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.25);
 }
 .btn.secondary {
-  background: #e2e8f0;
-  color: #1e293b;
+  background: #fff;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset;
 }
 .btn.danger {
-  background: #fee2e2;
+  background: #fef2f2;
   color: #b91c1c;
+  border: 1px solid #fecaca;
 }
 .btn.sm {
   padding: 4px 8px;
@@ -706,12 +745,13 @@ input.mid {
   font-size: 0.85rem;
 }
 .table-wrap {
-  margin-top: 12px;
+  margin-top: 14px;
   overflow: auto;
+  max-height: min(68vh, 720px);
   background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
   border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
 }
 table.grid {
   border-collapse: separate;
