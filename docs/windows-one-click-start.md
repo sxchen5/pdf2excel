@@ -18,7 +18,7 @@
        ...
    ```
 
-3. 启动脚本会 **优先使用** `D:\invoice-transfer\jdk\bin\java.exe`，**不要求**系统已安装 JDK。  
+3. 启动脚本会 **优先使用** `D:\invoice-transfer\jdk\bin\java.exe` 的**完整路径**启动，**不会**把便携目录拼进系统 `PATH`（避免系统 `PATH` 里若含有 `&`、未加引号路径等，在批处理中被误解析，出现 `'tium' is not recognized` 之类错误）。  
    若您习惯把运行时命名为 `jre`，也可放 **`jre\bin\java.exe`**（脚本同样支持）。
 
 ### 方式 B：系统已安装 JDK
