@@ -3,6 +3,7 @@ package com.xipeng.invoice.service;
 import com.xipeng.invoice.dto.ExtractedInvoiceDto;
 
 import java.math.BigDecimal;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -21,13 +22,16 @@ public final class InvoiceTextParser {
     /** 购/销方 “名称：” 单行 */
     private static final Pattern NAME_LABEL = Pattern.compile("名\\s*称\\s*[:：]\\s*([^\\r\\n]+)");
     /**
-     * 数电票版式：销、售、方、名、称 等字被拆行，如
-     * {@code 销 名称：南京… / 售 / 方}
+     * 数电票：{@code 销\\n售 名称：} 或 {@code 销 名称：}；专票常见「销售方信息」整块
      */
     private static final Pattern SELLER_NAME_SPLIT = Pattern.compile(
-            "销\\s*售?\\s*名\\s*称\\s*[:：]\\s*([^\\r\\n]+)", Pattern.DOTALL);
+            "销(?:\\s+售)?\\s*名\\s*称\\s*[:：]\\s*([^\\r\\n]+)", Pattern.DOTALL);
     private static final Pattern BUYER_NAME_SPLIT = Pattern.compile(
-            "购\\s*买?\\s*名\\s*称\\s*[:：]\\s*([^\\r\\n]+)", Pattern.DOTALL);
+            "购(?:\\s+买)?\\s*名\\s*称\\s*[:：]\\s*([^\\r\\n]+)", Pattern.DOTALL);
+    /** 增值税专用发票：销售方信息 … 购买方信息 */
+    private static final Pattern SELLER_INFO_SECTION = Pattern.compile(
+            "(?:销售方信息|销售方)\\s*([\\s\\S]{0,1500}?)(?=购买方信息|购买方)", Pattern.DOTALL);
+    private static final Pattern NAME_IN_BLOCK = Pattern.compile("名\\s*称\\s*[:：]\\s*([^\\r\\n]+)");
     /** Line item: *大类*明细 (common on VAT invoices) */
     private static final Pattern ITEM_STAR_LINE = Pattern.compile(
             "([*＊][^\\r\\n*]{1,40}[*＊][^\\r\\n]{1,120})");
@@ -62,7 +66,7 @@ public final class InvoiceTextParser {
         if (raw == null || raw.isBlank()) {
             return empty(null);
         }
-        String normalized = toAsciiDigits(normalize(raw));
+        String normalized = toAsciiDigits(normalize(Normalizer.normalize(raw, Normalizer.Form.NFKC)));
         String snippet = snippet(normalized, 2000);
 
         String invoiceDate = findDate(normalized);
@@ -106,6 +110,17 @@ public final class InvoiceTextParser {
     }
 
     private static String findIssuer(String text) {
+        Matcher info = SELLER_INFO_SECTION.matcher(text);
+        if (info.find()) {
+            String section = info.group(1);
+            Matcher nm = NAME_IN_BLOCK.matcher(section);
+            if (nm.find()) {
+                String v = cleanPartyName(nm.group(1));
+                if (looksLikeCompanyName(v)) {
+                    return v;
+                }
+            }
+        }
         Matcher seller = SELLER_NAME_SPLIT.matcher(text);
         if (seller.find()) {
             String v = cleanPartyName(seller.group(1));
@@ -129,9 +144,10 @@ public final class InvoiceTextParser {
         if (buy.find()) {
             buyer = cleanPartyName(buy.group(1));
         }
+        String buyerKey = normKey(buyer);
         // 若最后一项与购买方一致，则销方为倒数第二（数电票常见顺序）
         String last = names.get(names.size() - 1);
-        if (!buyer.isEmpty() && last.equals(buyer) && names.size() >= 2) {
+        if (!buyerKey.isEmpty() && normKey(last).equals(buyerKey) && names.size() >= 2) {
             return names.get(names.size() - 2);
         }
         // 旧版式：先买方后卖方
@@ -143,6 +159,13 @@ public final class InvoiceTextParser {
             return "";
         }
         return s.replaceAll("\\s+", "").trim();
+    }
+
+    private static String normKey(String s) {
+        if (s == null || s.isBlank()) {
+            return "";
+        }
+        return Normalizer.normalize(cleanPartyName(s), Normalizer.Form.NFKC);
     }
 
     private static boolean looksLikeCompanyName(String s) {

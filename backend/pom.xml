@@ -46,6 +46,12 @@
             <artifactId>tess4j</artifactId>
             <version>5.13.0</version>
         </dependency>
+        <!-- Robust JPEG decode (CMYK/subsampling) to avoid Tesseract native crashes -->
+        <dependency>
+            <groupId>com.twelvemonkeys.imageio</groupId>
+            <artifactId>imageio-jpeg</artifactId>
+            <version>3.12.0</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

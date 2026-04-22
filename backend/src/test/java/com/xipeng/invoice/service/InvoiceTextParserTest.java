@@ -87,6 +87,38 @@ class InvoiceTextParserTest {
     }
 
     @Test
+    void parsesSellerWhenXiaoAndShangAreOnSeparateLines() {
+        String text = """
+                销
+                售 名称：上海莫泰金陵东路酒店有限公司
+                方
+                购
+                买 名称：亚信科技（成都）有限公司
+                方
+                发票号码： 23312000000078711639
+                开票日期： 2023年09月15日
+                """;
+        ExtractedInvoiceDto d = InvoiceTextParser.parse(text);
+        assertTrue(d.issuer().contains("莫泰"));
+    }
+
+    @Test
+    void parsesSellerFromVatSpecialSellerInfoBlock() {
+        String text = """
+                电子发票（增值税专用发票）
+                销售方信息
+                名称：中国移动通信集团江苏有限公司南京分公司
+                统一社会信用代码/纳税人识别号：91320100MA1YH0XXXX
+                购买方信息
+                名称：锡彭市政建设（江苏）有限公司
+                发票号码：26327000000431239653
+                开票日期：2026年03月02日
+                """;
+        ExtractedInvoiceDto d = InvoiceTextParser.parse(text);
+        assertTrue(d.issuer().contains("中国移动"));
+    }
+
+    @Test
     void parsesHotelInvoiceItemWithoutQuantityGlue() {
         String text = """
                 电子发票（普通发票）
