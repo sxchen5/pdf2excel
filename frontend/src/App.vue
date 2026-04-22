@@ -2,6 +2,13 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { saveDraftState, loadDraftState, clearAllDraft, saveBlob, deleteBlob } from './persist.js'
 
+const COL_WIDTHS_STORAGE_KEY = 'invoice-table-col-widths-v1'
+
+function parsePx(w) {
+  const m = String(w || '').match(/(\d+)/)
+  return m ? Number(m[1]) : 96
+}
+
 /** 与常见移交表、数电票版式一致，可下拉选择 */
 const INVOICE_TYPE_OPTIONS = [
   '电子普票',
@@ -71,6 +78,72 @@ const message = ref('')
 const fileInput = ref(null)
 const dropActive = ref(false)
 let dragDepth = 0
+
+/** 列宽（px），表头可左右拖拽调整 */
+const colWidths = ref({})
+let resizeState = null
+
+function defaultColWidths() {
+  const o = { actions: 118 }
+  for (const c of COLS) {
+    o[c.key] = parsePx(c.width)
+  }
+  return o
+}
+
+function loadColWidths() {
+  try {
+    const raw = localStorage.getItem(COL_WIDTHS_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') {
+        return { ...defaultColWidths(), ...parsed }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return defaultColWidths()
+}
+
+const tableWidthPx = computed(() => {
+  let sum = colWidths.value.actions ?? 118
+  for (const c of COLS) {
+    sum += colWidths.value[c.key] ?? parsePx(c.width)
+  }
+  return Math.max(sum, 800)
+})
+
+function onResizeDown(key, e) {
+  e.preventDefault()
+  e.stopPropagation()
+  resizeState = {
+    key,
+    originX: e.clientX,
+    originW: colWidths.value[key] ?? parsePx(COLS.find((c) => c.key === key)?.width) ?? 96
+  }
+  window.addEventListener('mousemove', onResizeMove)
+  window.addEventListener('mouseup', onResizeUp, { once: true })
+}
+
+function onResizeMove(e) {
+  if (!resizeState) return
+  const dx = e.clientX - resizeState.originX
+  const min = resizeState.key === 'actions' ? 88 : 40
+  const max = 640
+  const w = Math.min(max, Math.max(min, resizeState.originW + dx))
+  colWidths.value = { ...colWidths.value, [resizeState.key]: Math.round(w) }
+}
+
+function onResizeUp() {
+  resizeState = null
+  window.removeEventListener('mousemove', onResizeMove)
+  try {
+    localStorage.setItem(COL_WIDTHS_STORAGE_KEY, JSON.stringify(colWidths.value))
+  } catch {
+    /* ignore */
+  }
+}
 
 function collectAcceptedFiles(fileList) {
   const out = []
@@ -293,6 +366,7 @@ function scheduleSave() {
 watch([sheetTitle, serialNo, sheetName, rows, defaults], scheduleSave, { deep: true })
 
 onMounted(async () => {
+  colWidths.value = loadColWidths()
   const saved = await loadDraftState()
   if (saved?.rows?.length) {
     sheetTitle.value = saved.sheetTitle ?? sheetTitle.value
@@ -359,42 +433,68 @@ async function hardReset() {
       </div>
     </section>
 
-    <section class="toolbar">
-      <div
-        class="dropzone"
-        :class="{ active: dropActive, disabled: busy }"
-        @dragenter.prevent="onDragEnter"
-        @dragleave.prevent="onDragLeave"
-        @dragover.prevent
-        @drop.prevent="onDrop"
-        @click="!busy && fileInput?.click()"
-      >
-        <input
-          ref="fileInput"
-          type="file"
-          accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
-          multiple
-          class="file-hidden"
-          @change="onFilesSelected"
-        />
-        <p class="dropzone-title">点击或拖入文件上传</p>
-        <p class="dropzone-hint">支持 PDF、PNG、JPG、JPEG、WEBP，可多选或一次拖入多个文件</p>
+    <section class="toolbar-row">
+      <aside class="upload-column">
+        <div class="upload-column-title">文件上传</div>
+        <div
+          class="dropzone"
+          :class="{ active: dropActive, disabled: busy }"
+          @dragenter.prevent="onDragEnter"
+          @dragleave.prevent="onDragLeave"
+          @dragover.prevent
+          @drop.prevent="onDrop"
+          @click="!busy && fileInput?.click()"
+        >
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
+            multiple
+            class="file-hidden"
+            @change="onFilesSelected"
+          />
+          <p class="dropzone-title">点击或拖入</p>
+          <p class="dropzone-hint">PDF / 图片，支持批量</p>
+        </div>
+      </aside>
+      <div class="toolbar-main">
+        <div class="toolbar-actions">
+          <button type="button" class="btn secondary" :disabled="busy" @click="addBlankRow">添加空行</button>
+          <button type="button" class="btn primary" :disabled="busy || !rows.length" @click="exportExcel">
+            导出 Excel
+          </button>
+          <button type="button" class="btn danger" :disabled="busy" @click="hardReset">一键清空（含本地缓存）</button>
+          <span v-if="busy" class="hint">处理中…</span>
+          <span v-if="message" class="msg">{{ message }}</span>
+        </div>
+        <p class="table-hint">表头右侧竖线可左右拖拽，调整列宽（设置会保存在本机浏览器）。</p>
       </div>
-      <button type="button" class="btn secondary" :disabled="busy" @click="addBlankRow">添加空行</button>
-      <button type="button" class="btn primary" :disabled="busy || !rows.length" @click="exportExcel">
-        导出 Excel
-      </button>
-      <button type="button" class="btn danger" :disabled="busy" @click="hardReset">一键清空（含本地缓存）</button>
-      <span v-if="busy" class="hint">处理中…</span>
-      <span v-if="message" class="msg">{{ message }}</span>
     </section>
 
     <div class="table-wrap">
-      <table class="grid">
+      <table class="grid" :style="{ width: tableWidthPx + 'px' }">
+        <colgroup>
+          <col v-for="c in COLS" :key="'col-' + c.key" :style="{ width: (colWidths[c.key] ?? parsePx(c.width)) + 'px' }" />
+          <col :style="{ width: (colWidths.actions ?? 118) + 'px' }" />
+        </colgroup>
         <thead>
           <tr>
-            <th v-for="c in COLS" :key="c.key" :style="{ minWidth: c.width }">{{ c.label }}</th>
-            <th class="actions">操作</th>
+            <th v-for="c in COLS" :key="c.key" class="th-resizable">
+              <span class="th-label">{{ c.label }}</span>
+              <span
+                class="col-resize-handle"
+                title="拖拽调整列宽"
+                @mousedown="onResizeDown(c.key, $event)"
+              />
+            </th>
+            <th class="actions th-resizable">
+              <span class="th-label">操作</span>
+              <span
+                class="col-resize-handle"
+                title="拖拽调整列宽"
+                @mousedown="onResizeDown('actions', $event)"
+              />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -433,9 +533,14 @@ body {
   margin: 0;
 }
 .page {
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 24px 16px 48px;
+}
+@media (max-width: 900px) {
+  .toolbar-row {
+    grid-template-columns: 1fr;
+  }
 }
 .hero h1 {
   margin: 0 0 8px;
@@ -506,20 +611,45 @@ input.narrow {
 input.mid {
   width: 180px;
 }
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 10px;
+.toolbar-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
   margin-top: 16px;
 }
+.upload-column {
+  background: #fff;
+  border-radius: 10px;
+  padding: 14px 14px 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0;
+}
+.upload-column-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin: 0 0 10px;
+  color: #1e293b;
+}
+.toolbar-main {
+  min-width: 0;
+}
+.toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.table-hint {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  color: #64748b;
+}
 .dropzone {
-  flex: 1;
-  min-width: 240px;
-  max-width: 520px;
+  width: 100%;
   border: 2px dashed #94a3b8;
   border-radius: 10px;
-  padding: 20px 16px;
+  padding: 22px 12px;
   text-align: center;
   cursor: pointer;
   background: #f8fafc;
@@ -592,21 +722,48 @@ input.mid {
   background: #fff;
   border-radius: 10px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0;
 }
 table.grid {
-  border-collapse: collapse;
-  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
   font-size: 0.85rem;
 }
 .grid th {
-  background: #dbeafe;
+  background: linear-gradient(180deg, #e8f2fe 0%, #dbeafe 100%);
   font-weight: 600;
-  padding: 8px 6px;
+  padding: 0;
   border: 1px solid #bfdbfe;
   text-align: left;
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06);
+  vertical-align: middle;
+}
+.th-resizable {
+  position: relative;
+}
+.th-label {
+  display: block;
+  padding: 10px 10px 10px 8px;
+  line-height: 1.25;
+  user-select: none;
+}
+.col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+  border-right: 2px solid transparent;
+}
+.col-resize-handle:hover {
+  border-right-color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
 }
 .grid td {
   border: 1px solid #e5e7eb;
@@ -629,9 +786,13 @@ table.grid {
   font-size: 0.82rem;
 }
 .actions {
-  width: 110px;
   text-align: center;
   white-space: nowrap;
+}
+.actions .th-label {
+  text-align: center;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 .fname {
   margin-left: 4px;
