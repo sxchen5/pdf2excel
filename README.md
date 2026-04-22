@@ -7,7 +7,7 @@ Spring Boot 3 + Vue 3：上传增值税电子发票等 PDF 或图片，自动提
 - JDK 21
 - Maven **3.3.9 及以上**（`pom.xml` 中已固定 compiler / surefire / resources / exec 插件版本，便于在旧版 Maven 上构建）
 - **Node.js 与 npm** 已安装在系统 `PATH` 中（`mvn package` 会在 `generate-resources` 阶段执行 `frontend` 目录下的 `npm install` 与 `npm run build`，不再通过 Maven 下载 Node）
-- **Tesseract OCR**（扫描件 / 无文字层 PDF）：需安装 `tesseract-ocr` 与 `tesseract-ocr-chi-sim`，且 **`tesseract` 在系统 `PATH` 中**（部分 JPEG 在 JVM 内调用失败时会自动改用命令行识别）。默认数据路径 `app.tesseract.datapath=/usr/share/tesseract-ocr/5/tessdata`；可用 `app.ocr.tesseract-cli-fallback=false` 关闭 CLI 回退（`application.properties`）
+- **Tesseract OCR**（扫描件 / 无文字层 PDF）：需安装 Tesseract 与 **简体中文语言包**，并配置 **`app.tesseract.datapath`** 指向放有 `chi_sim.traineddata` 的 **`tessdata` 文件夹**（不是 exe 所在目录）。Linux 默认常为 `/usr/share/tesseract-ocr/5/tessdata`；**Windows** 多为 `C:\Program Files\Tesseract-OCR\tessdata`，请在 `application.properties` 中改成你的路径（示例见 **`docs/application-windows.properties.example`**）。**`tesseract` 命令需在 PATH**（Tess4J 异常时会用命令行并传入 `--tessdata-dir`）。可用 `app.ocr.tesseract-cli-fallback=false` 关闭 CLI 回退。
 
 **说明**：Spring Boot 3.4 的父 POM 通常要求 **Maven 3.6.3+**；若仅用 Maven 3.3.9 仍无法解析父 POM 或插件，请将本机 Maven 升级到 3.6.3 或更高版本。
 

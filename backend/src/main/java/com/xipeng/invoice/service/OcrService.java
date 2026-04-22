@@ -16,6 +16,8 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 public class OcrService {
@@ -25,13 +27,19 @@ public class OcrService {
     private final ITesseract tesseract;
     private final Object tesseractLock = new Object();
     private final boolean cliFallbackEnabled;
+    private final String tessDataPath;
 
     public OcrService(
             @Value("${app.tesseract.datapath:/usr/share/tesseract-ocr/5/tessdata}") String dataPath,
             @Value("${app.ocr.tesseract-cli-fallback:true}") boolean cliFallbackEnabled) {
         this.cliFallbackEnabled = cliFallbackEnabled;
+        String p = dataPath == null ? "" : dataPath.trim();
+        if (p.isEmpty()) {
+            p = "/usr/share/tesseract-ocr/5/tessdata";
+        }
+        this.tessDataPath = p;
         Tesseract t = new Tesseract();
-        t.setDatapath(dataPath);
+        t.setDatapath(p);
         t.setLanguage("chi_sim+eng");
         t.setOcrEngineMode(1);
         t.setPageSegMode(1);
@@ -65,8 +73,8 @@ public class OcrService {
     }
 
     /**
-     * Always rasterize to PNG on disk first, then Tess4J; on JNI crash or Tess4J error,
-     * fall back to {@code tesseract} CLI (separate process, avoids JVM native bugs on some JPEGs).
+     * Rasterize to PNG on disk, Tess4J first; on JNI crash / API error fall back to {@code tesseract}
+     * CLI with explicit {@code --tessdata-dir} (Windows/Linux portable installs).
      */
     private String ocrImage(BufferedImage image) throws IOException {
         Path pngTmp = Files.createTempFile("ocr-rgb-", ".png");
@@ -76,15 +84,15 @@ public class OcrService {
                 try {
                     BufferedImage forJvm = ImageIO.read(pngTmp.toFile());
                     if (forJvm == null) {
-                        return tryCli(pngTmp);
+                        return runTesseractCliOrDisabled(pngTmp, null);
                     }
                     return tesseract.doOCR(forJvm);
                 } catch (TesseractException e) {
-                    return tryCliOrThrow(pngTmp, new IOException("OCR failed: " + e.getMessage(), e));
+                    return runTesseractCliOrDisabled(pngTmp, new IOException("Tess4J OCR failed: " + e.getMessage(), e));
                 } catch (Error e) {
-                    return tryCliOrThrow(
+                    return runTesseractCliOrDisabled(
                             pngTmp,
-                            new IOException("OCR native error: " + e.getMessage(), e));
+                            new IOException("Tess4J native error (will try tesseract CLI): " + e.getMessage(), e));
                 }
             }
         } finally {
@@ -92,36 +100,40 @@ public class OcrService {
         }
     }
 
-    private String tryCli(Path pngTmp) throws IOException {
+    private String runTesseractCliOrDisabled(Path imagePath, IOException tess4jFailure) throws IOException {
         if (!cliFallbackEnabled) {
+            if (tess4jFailure != null) {
+                throw tess4jFailure;
+            }
             return "";
         }
-        return runTesseractCli(pngTmp);
-    }
-
-    private String tryCliOrThrow(Path pngTmp, IOException primary) throws IOException {
-        if (!cliFallbackEnabled) {
-            throw primary;
-        }
         try {
-            return runTesseractCli(pngTmp);
+            return runTesseractCli(imagePath);
         } catch (IOException cli) {
-            primary.addSuppressed(cli);
-            throw primary;
+            if (tess4jFailure != null) {
+                tess4jFailure.addSuppressed(cli);
+                throw tess4jFailure;
+            }
+            throw cli;
         }
     }
 
     private String runTesseractCli(Path imagePath) throws IOException {
-        ProcessBuilder pb = new ProcessBuilder(
-                "tesseract",
-                imagePath.toAbsolutePath().toString(),
-                "stdout",
-                "-l",
-                "chi_sim+eng",
-                "--oem",
-                "1",
-                "--psm",
-                "1");
+        List<String> cmd = new ArrayList<>();
+        cmd.add("tesseract");
+        cmd.add(imagePath.toAbsolutePath().toString());
+        cmd.add("stdout");
+        cmd.add("-l");
+        cmd.add("chi_sim+eng");
+        if (tessDataPath != null && !tessDataPath.isBlank()) {
+            cmd.add("--tessdata-dir");
+            cmd.add(tessDataPath);
+        }
+        cmd.add("--oem");
+        cmd.add("1");
+        cmd.add("--psm");
+        cmd.add("1");
+        ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.redirectErrorStream(true);
         Process p = pb.start();
         try {

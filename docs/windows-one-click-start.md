@@ -25,9 +25,13 @@
 
 若上述目录下 **没有** `jdk\bin\java.exe`，脚本会回退到 **系统 PATH** 里的 `java`，此时需本机已安装 JDK 21 并配置环境变量。
 
-### OCR（可选）
+### OCR（扫描件 / 无文字 PDF 必装）
 
-若需 **上传图片 / 无文字层 PDF 做 OCR**，请安装 **Tesseract**，并把 `tesseract` 加入 **系统 PATH**；语言包需含 **`chi_sim`**。便携 JDK 不会自动带上 Tesseract，需单独安装或将来自行把 `tesseract.exe` 也放进本目录并在脚本里写死路径（当前未内置）。
+1. 安装 **Tesseract for Windows**，并把 **`tesseract.exe` 加入系统 PATH**。  
+2. 在 **`application.properties`**（或 jar 同目录下的外部配置）里设置 **`app.tesseract.datapath`** 为 **`tessdata` 目录**（内含 `chi_sim.traineddata`），例如：  
+   `app.tesseract.datapath=C:/Program Files/Tesseract-OCR/tessdata`  
+   详见仓库 **`docs/application-windows.properties.example`**。  
+3. 便携 JDK **不会**自带 Tesseract，需单独安装。
 
 ## 2. 打包 jar
 

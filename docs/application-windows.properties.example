@@ -1,0 +1,10 @@
+# 复制为 backend/src/main/resources/application.properties 中对应项，或启动时用：
+#   java -jar app.jar --app.tesseract.datapath="C:\Program Files\Tesseract-OCR\tessdata"
+
+# Tesseract 语言包目录（内含 chi_sim.traineddata、eng.traineddata 等）
+# Linux 示例: /usr/share/tesseract-ocr/5/tessdata
+# Windows 安装版常见: C:\Program Files\Tesseract-OCR\tessdata
+app.tesseract.datapath=C:\\Program Files\\Tesseract-OCR\\tessdata
+
+# Tess4J 崩溃时是否调用命令行 tesseract（需 tesseract.exe 在 PATH）
+app.ocr.tesseract-cli-fallback=true

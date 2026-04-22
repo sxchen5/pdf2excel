@@ -43,15 +43,28 @@ public class InvoicePdfService {
     }
 
     private ExtractedInvoiceDto ocrFirstPage(PDDocument doc) throws IOException {
+        IOException last = null;
+        for (int dpi : new int[]{200, 150}) {
+            try {
+                String ocrText = renderPageToPngText(doc, dpi);
+                return InvoiceTextParser.parse(ocrText);
+            } catch (IOException e) {
+                last = e;
+            }
+        }
+        if (last != null) {
+            throw last;
+        }
+        return InvoiceTextParser.parse("");
+    }
+
+    private String renderPageToPngText(PDDocument doc, int dpi) throws IOException {
         PDFRenderer renderer = new PDFRenderer(doc);
-        BufferedImage image = renderer.renderImageWithDPI(0, 300, ImageType.RGB);
-        byte[] png;
+        BufferedImage image = renderer.renderImageWithDPI(0, dpi, ImageType.RGB);
         try (java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream()) {
             ImageIO.write(image, "png", baos);
-            png = baos.toByteArray();
+            return ocrService.recognizePng(new ByteArrayInputStream(baos.toByteArray()));
         }
-        String ocrText = ocrService.recognizePng(new ByteArrayInputStream(png));
-        return InvoiceTextParser.parse(ocrText);
     }
 
     public ExtractedInvoiceDto extractFromStream(InputStream in) throws IOException {
