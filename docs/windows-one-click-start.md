@@ -2,11 +2,32 @@
 
 本应用是 **Spring Boot 单体**：一个 `jar` 内置前端静态资源，启动后浏览器访问 **`http://127.0.0.1:8080/`** 即可。
 
-## 1. 准备环境
+## 1. 准备 Java（二选一）
 
-1. 安装 **JDK 21**（或自带 JRE 21 的运行时），并配置 **`java` 在系统 PATH** 中。  
-   在命令行执行 `java -version` 应显示 21。
-2. 若需 **上传图片 / 无文字层 PDF 做 OCR**，请安装 **Tesseract**，并把 `tesseract` 加入 PATH；语言包需含 **`chi_sim`**（与 Linux 部署说明一致）。
+### 方式 A：便携 JDK（推荐，整包拷走即可用）
+
+1. 下载 **Windows x64 版 JDK 21** 的 **zip 解压包**（不是安装程序也可）。
+2. 解压后，将其中 **顶层文件夹** 改名为 **`jdk`**，放到与 `start-invoice-transfer.bat` **同一目录**，例如：
+
+   ```
+   D:\invoice-transfer\
+     start-invoice-transfer.bat
+     invoice-transfer-0.0.1-SNAPSHOT.jar
+     jdk\
+       bin\java.exe
+       ...
+   ```
+
+3. 启动脚本会 **优先使用** `D:\invoice-transfer\jdk\bin\java.exe`，**不要求**系统已安装 JDK。  
+   若您习惯把运行时命名为 `jre`，也可放 **`jre\bin\java.exe`**（脚本同样支持）。
+
+### 方式 B：系统已安装 JDK
+
+若上述目录下 **没有** `jdk\bin\java.exe`，脚本会回退到 **系统 PATH** 里的 `java`，此时需本机已安装 JDK 21 并配置环境变量。
+
+### OCR（可选）
+
+若需 **上传图片 / 无文字层 PDF 做 OCR**，请安装 **Tesseract**，并把 `tesseract` 加入 **系统 PATH**；语言包需含 **`chi_sim`**。便携 JDK 不会自动带上 Tesseract，需单独安装或将来自行把 `tesseract.exe` 也放进本目录并在脚本里写死路径（当前未内置）。
 
 ## 2. 打包 jar
 
@@ -25,10 +46,11 @@ mvn clean package -DskipTests
 
 在任意文件夹（例如 `D:\invoice-transfer\`）放入：
 
-| 文件 | 说明 |
-|------|------|
+| 文件 / 文件夹 | 说明 |
+|----------------|------|
 | `invoice-transfer-0.0.1-SNAPSHOT.jar` | 上一步生成的 jar |
 | `start-invoice-transfer.bat` | 仓库内 `scripts/windows/start-invoice-transfer.bat`，复制到此目录 |
+| `jdk\`（可选） | 便携 JDK 21 解压目录，须含 `bin\java.exe` |
 
 若 jar 文件名不同，用记事本编辑 bat 顶部的 **`JAR_NAME=`**。
 
@@ -42,7 +64,7 @@ mvn clean package -DskipTests
 
 ## 5. 常见问题
 
-- **提示找不到 java**：安装 JDK 21 并配置 PATH，重新打开 cmd 再试。  
+- **提示找不到 java**：在同目录放入 `jdk\bin\java.exe`（便携），或安装 JDK 21 并配置 PATH。  
 - **端口被占用**：修改 `backend/src/main/resources/application.properties` 里的 `server.port`，重新打包 jar；同时把 bat 里的 `OPEN_URL` 端口改成一致。  
 - **防火墙**：首次访问若被拦截，允许 Java 访问专用网络即可。
 

@@ -23,7 +23,7 @@ java -jar target/invoice-transfer-0.0.1-SNAPSHOT.jar
 
 ## Windows 下一键启动
 
-将 `backend/target/invoice-transfer-0.0.1-SNAPSHOT.jar` 与仓库中的 `scripts/windows/start-invoice-transfer.bat` 放在同一文件夹，双击 bat 即可（需本机已安装 **JDK 21** 并配置 `java` 到 PATH）。详细步骤见 **`docs/windows-one-click-start.md`**。
+将 `backend/target/invoice-transfer-0.0.1-SNAPSHOT.jar` 与仓库中的 `scripts/windows/start-invoice-transfer.bat` 放在同一文件夹；可选在同目录放入便携 **`jdk`**（内含 `bin\java.exe`），即可不依赖系统安装 JDK。详细步骤见 **`docs/windows-one-click-start.md`**。
 
 ## 开发模式（前后端分离）
 
