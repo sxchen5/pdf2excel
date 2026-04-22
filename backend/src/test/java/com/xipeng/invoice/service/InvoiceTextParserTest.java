@@ -134,6 +134,22 @@ class InvoiceTextParserTest {
     }
 
     @Test
+    void stripsGluedQuantityDecimalAfterItemName() {
+        String text = """
+                项目名称
+                *住宿服务*住宿费3368.
+                金
+                额
+                1106.60
+                税
+                额
+                ¥66.40
+                """;
+        ExtractedInvoiceDto d = InvoiceTextParser.parse(text);
+        assertEquals("*住宿服务*住宿费", d.invoiceItem());
+    }
+
+    @Test
     void parsesHotelInvoiceItemWithoutQuantityGlue() {
         String text = """
                 电子发票（普通发票）

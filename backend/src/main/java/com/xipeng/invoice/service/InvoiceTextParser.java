@@ -379,6 +379,12 @@ public final class InvoiceTextParser {
         return s == null ? "" : s;
     }
 
+    /**
+     * 项目名称后误粘「数量+单价」且去空格后无分隔，如 {@code *住宿费3368.}、{@code *餐费311.725…}
+     */
+    private static final Pattern ITEM_TRAILING_NUM_JUNK = Pattern.compile(
+            "^(.+[*\\u4e00-\\u9fff])([\\d,]+(?:\\.[\\d,]*)?)$");
+
     /** 去掉项目名称后误粘的数量、单价长小数、金额等 */
     private static String sanitizeItemDisplay(String item) {
         if (item == null || item.isEmpty()) {
@@ -399,6 +405,50 @@ public final class InvoiceTextParser {
             if (tail.matches("\\d+(\\.\\d{2,})?")) {
                 t = glued.group(1).trim();
             }
+        }
+        t = stripGluedQuantityUnitPriceSuffix(t);
+        return t;
+    }
+
+    /**
+     * PDF 常把「3」与「368.86…」拼成 {@code …费3368.} 或末尾单独 {@code 3368.}；从最后一处中文/*后的纯数字尾向前剥离。
+     */
+    private static String stripGluedQuantityUnitPriceSuffix(String t) {
+        if (t == null || t.isEmpty()) {
+            return t;
+        }
+        for (int round = 0; round < 8; round++) {
+            Matcher m = ITEM_TRAILING_NUM_JUNK.matcher(t);
+            if (!m.matches()) {
+                break;
+            }
+            String head = m.group(1);
+            String tail = m.group(2).replace(",", "");
+            if (tail.length() < 2) {
+                break;
+            }
+            if (!tail.matches("[\\d.]+")) {
+                break;
+            }
+            boolean strip = false;
+            if (tail.endsWith(".")) {
+                // 如 3368. = 数量「3」+ 单价「368.…」去空格后粘在项目名后
+                strip = true;
+            } else if (tail.contains(".")) {
+                int dot = tail.lastIndexOf('.');
+                String frac = tail.substring(dot + 1);
+                if (frac.length() != 2) {
+                    // 单价长小数或残缺小数，非标准两位金额
+                    strip = true;
+                }
+            } else if (tail.matches("\\d{4,}")) {
+                // 纯数字尾且较长，多为表格列误拼
+                strip = true;
+            }
+            if (!strip) {
+                break;
+            }
+            t = head.trim();
         }
         return t;
     }
